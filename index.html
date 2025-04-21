@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Anteprima NodoLayer</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.3.0/ol.css">
+  <style>
+    html, body, #map {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+    #upload-container {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 8px;
+      border-radius: 4px;
+      z-index: 1000;
+      font-family: sans-serif;
+      max-width: 250px;
+    }
+    #toggleDropdown {
+      width: 100%;
+      margin-bottom: 5px;
+    }
+    #gpxDropdown {
+      width: 100%;
+      display: none;
+      border: none;
+      padding: 0;
+    }
+    .gpx-item {
+      display: flex;
+      align-items: center;
+      padding: 2px 4px;
+      font-size: 14px;
+    }
+    .gpx-item input[type="checkbox"] {
+      margin-right: 6px;
+    }
+    .ol-popup {
+      position: absolute;
+      background-color: white;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      bottom: 12px;
+      left: -50px;
+      min-width: 180px;
+      font-family: 'Helvetica Neue', Helvetica, 'Arial Narrow', sans-serif;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <div id="upload-container">
+    <button id="toggleDropdown">Mostra/Nascondi tracce</button>
+    <input type="file" id="gpxInput" accept=".gpx"><br>
+    <label><input type="checkbox" id="toggleAll" checked> Mostra/Nascondi tutte</label>
+    <div id="gpxDropdown"></div>
+  </div>
+  <div id="map"></div>
+  <script src="https://cdn.jsdelivr.net/npm/ol@v7.3.0/dist/ol.js"></script>
+  <script>
+    const map = new ol.Map({
+      target: 'map',
+      layers: [new ol.layer.Tile({ source: new ol.source.OSM() })],
+      view: new ol.View({ center: ol.proj.fromLonLat([9.19, 45.46]), zoom: 12 })
+    });
+
+    const nodoSource = new ol.source.Vector();
+    const nodoLayer = new ol.layer.Vector({ source: nodoSource });
+    map.addLayer(nodoLayer);
+
+    const overlay = new ol.Overlay({
+      element: document.createElement('div'),
+      positioning: 'bottom-center',
+      stopEvent: false,
+      offset: [0, -15]
+    });
+    map.addOverlay(overlay);
+
+    const gpxDropdown = document.getElementById('gpxDropdown');
+    const toggleDropdown = document.getElementById('toggleDropdown');
+    const toggleAll = document.getElementById('toggleAll');
+    const gpxLayers = {};
+
+    toggleDropdown.addEventListener('click', () => {
+      gpxDropdown.style.display = gpxDropdown.style.display === 'none' ? 'block' : 'none';
+    });
+
+    toggleAll.addEventListener('change', () => {
+      const show = toggleAll.checked;
+      Object.values(gpxLayers).forEach(layer => layer.setVisible(show));
+      document.querySelectorAll('.gpx-item input[type="checkbox"]').forEach(cb => cb.checked = show);
+    });
+
+    function createDynamicStyle() {
+      return function(feature, resolution) {
+        const zoom = map.getView().getZoom();
+        const width = Math.max(1, zoom * 0.5);
+        return new ol.style.Style({
+          stroke: new ol.style.Stroke({ color: 'rgba(0, 255, 255, 0.55)', width: width })
+        });
+      };
+    }
+
+    function zoomToLayer(layer) {
+      const extent = layer.getSource().getExtent();
+      if (!ol.extent.isEmpty(extent)) {
+        map.getView().fit(extent, { padding: [50, 50, 50, 50], maxZoom: 17 });
+      }
+    }
+
+    function addGpxOption(file, layer) {
+      const div = document.createElement('div');
+      div.className = 'gpx-item';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = true;
+      checkbox.addEventListener('change', () => {
+        layer.setVisible(checkbox.checked);
+      });
+
+      const label = document.createElement('label');
+      label.textContent = file;
+      label.style.cursor = 'pointer';
+      label.style.flex = '1';
+      label.addEventListener('click', () => {
+        zoomToLayer(layer);
+        piazze.forEach(p => {
+          if (file.toLowerCase().includes(p.nome.toLowerCase().replace(/\s+/g, ''))) {
+            const feature = nodoFeatures.find(f => f.get('nome') === p.nome);
+            if (feature) {
+              const element = overlay.getElement();
+              element.innerHTML = `<strong>${feature.get('nome')}</strong><br>${feature.get('vie').join(', ')}`;
+              element.className = 'ol-popup';
+              const coord = feature.getGeometry().getCoordinates();
+              overlay.setPosition(coord);
+              map.getView().animate({ center: coord, zoom: 16 });
+              lastClickedFeature = feature;
+            }
+          }
+        });
+      });
+
+      div.appendChild(checkbox);
+      div.appendChild(label);
+      gpxDropdown.appendChild(div);
+    }
+
+    fetch('list-gpx.php')
+      .then(response => response.json())
+      .then(gpxFiles => {
+        gpxFiles.forEach(file => {
+          const source = new ol.source.Vector({ url: file, format: new ol.format.GPX() });
+          const layer = new ol.layer.Vector({ source, style: createDynamicStyle() });
+          map.addLayer(layer);
+          gpxLayers[file] = layer;
+          addGpxOption(file, layer);
+        });
+      });
+
+    document.getElementById('gpxInput').addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const gpxFormat = new ol.format.GPX();
+          const features = gpxFormat.readFeatures(e.target.result, { featureProjection: 'EPSG:3857' });
+          const vectorSource = new ol.source.Vector({ features });
+          const gpxLayer = new ol.layer.Vector({ source: vectorSource, style: createDynamicStyle() });
+          map.addLayer(gpxLayer);
+
+          const name = file.name;
+          gpxLayers[name] = gpxLayer;
+          zoomToLayer(gpxLayer);
+          addGpxOption(name, gpxLayer);
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    const piazze = [
+      { nome: 'Piazza Duomo', lon: 9.1916, lat: 45.4642, vie: ['Via Torino', 'Corso Vittorio Emanuele II'] },
+      { nome: 'Piazza San Babila', lon: 9.1982, lat: 45.4656, vie: ['Corso Monforte', 'Corso Venezia'] }
+    ];
+
+    const nodoFeatures = [];
+
+    piazze.forEach(p => {
+      const coord = ol.proj.fromLonLat([p.lon, p.lat]);
+      const feature = new ol.Feature({
+        geometry: new ol.geom.Point(coord),
+        nome: p.nome,
+        vie: p.vie
+      });
+      feature.setStyle(new ol.style.Style({
+        image: new ol.style.Circle({
+          radius: 12,
+          fill: new ol.style.Fill({ color: 'blue' }),
+          stroke: new ol.style.Stroke({ color: 'cyan', width: 3 })
+        })
+      }));
+      nodoSource.addFeature(feature);
+      nodoFeatures.push(feature);
+    });
+
+    let lastClickedFeature = null;
+
+    map.on('singleclick', function(evt) {
+      const feature = map.forEachFeatureAtPixel(evt.pixel, f => f);
+      const element = overlay.getElement();
+
+      if (lastClickedFeature === feature) {
+        overlay.setPosition(undefined);
+        lastClickedFeature = null;
+        return;
+      }
+
+      if (feature && feature.get('nome')) {
+        element.innerHTML = `<strong>${feature.get('nome')}</strong><br>${feature.get('vie').join(', ')}`;
+        element.className = 'ol-popup';
+        overlay.setPosition(evt.coordinate);
+        map.getView().animate({ center: feature.getGeometry().getCoordinates(), zoom: 16 });
+        lastClickedFeature = feature;
+      } else {
+        overlay.setPosition(undefined);
+        lastClickedFeature = null;
+      }
+    });
+  </script>
+</body>
+</html>
