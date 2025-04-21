@@ -5,11 +5,7 @@
   <title>Anteprima NodoLayer</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.3.0/ol.css">
   <style>
-    html, body, #map {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-    }
+    html, body, #map { margin: 0; padding: 0; height: 100%; }
     #upload-container {
       position: absolute;
       top: 10px;
@@ -21,25 +17,15 @@
       font-family: sans-serif;
       max-width: 250px;
     }
-    #toggleDropdown {
-      width: 100%;
-      margin-bottom: 5px;
-    }
-    #gpxDropdown {
-      width: 100%;
-      display: none;
-      border: none;
-      padding: 0;
-    }
+    #toggleDropdown { width: 100%; margin-bottom: 5px; }
+    #gpxDropdown { width: 100%; display: none; border: none; padding: 0; }
     .gpx-item {
       display: flex;
       align-items: center;
       padding: 2px 4px;
       font-size: 14px;
     }
-    .gpx-item input[type="checkbox"] {
-      margin-right: 6px;
-    }
+    .gpx-item input[type="checkbox"] { margin-right: 6px; }
     .ol-popup {
       position: absolute;
       background-color: white;
@@ -131,20 +117,6 @@
       label.style.flex = '1';
       label.addEventListener('click', () => {
         zoomToLayer(layer);
-        piazze.forEach(p => {
-          if (file.toLowerCase().includes(p.nome.toLowerCase().replace(/\s+/g, ''))) {
-            const feature = nodoFeatures.find(f => f.get('nome') === p.nome);
-            if (feature) {
-              const element = overlay.getElement();
-              element.innerHTML = `<strong>${feature.get('nome')}</strong><br>${feature.get('vie').join(', ')}`;
-              element.className = 'ol-popup';
-              const coord = feature.getGeometry().getCoordinates();
-              overlay.setPosition(coord);
-              map.getView().animate({ center: coord, zoom: 16 });
-              lastClickedFeature = feature;
-            }
-          }
-        });
       });
 
       div.appendChild(checkbox);
@@ -152,17 +124,19 @@
       gpxDropdown.appendChild(div);
     }
 
-    fetch('list-gpx.php')
-      .then(response => response.json())
-      .then(gpxFiles => {
-        gpxFiles.forEach(file => {
-          const source = new ol.source.Vector({ url: file, format: new ol.format.GPX() });
-          const layer = new ol.layer.Vector({ source, style: createDynamicStyle() });
-          map.addLayer(layer);
-          gpxLayers[file] = layer;
-          addGpxOption(file, layer);
-        });
-      });
+    const gpxFiles = [
+      "IEO - Duomo - Niguarda.gpx",
+      "Malpensa - Orio.gpx",
+      "Duomo-Rogoredo.gpx"
+    ];
+
+    gpxFiles.forEach(file => {
+      const source = new ol.source.Vector({ url: file, format: new ol.format.GPX() });
+      const layer = new ol.layer.Vector({ source, style: createDynamicStyle() });
+      map.addLayer(layer);
+      gpxLayers[file] = layer;
+      addGpxOption(file, layer);
+    });
 
     document.getElementById('gpxInput').addEventListener('change', function(event) {
       const file = event.target.files[0];
@@ -184,6 +158,7 @@
       }
     });
 
+    // Aggiunta punti personalizzati (opzionale)
     const piazze = [
       { nome: 'Piazza Duomo', lon: 9.1916, lat: 45.4642, vie: ['Via Torino', 'Corso Vittorio Emanuele II'] },
       { nome: 'Piazza San Babila', lon: 9.1982, lat: 45.4656, vie: ['Corso Monforte', 'Corso Venezia'] }
